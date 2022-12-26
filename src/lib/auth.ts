@@ -4,6 +4,7 @@ import { client } from './settings'
 
 import type { Models, RealtimeResponseEvent } from 'appwrite'
 import type { Writable } from 'svelte/store'
+import { databases } from './database'
 
 const account = new Account(client)
 
