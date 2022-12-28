@@ -14,14 +14,12 @@ class Collection {
 		return databases.createDocument(this.databaseId, this.collectionId, ID.unique(), data, permissions)
 	}
 
-	updateDocument(documentId: string, data: { [key: string]: any } = {}, permissions: string[] = null) {
-		if (permissions.length === 0 && Object.keys(data).length === 0) return
-
-		return databases.updateDocument(this.databaseId, this.collectionId, documentId, data, permissions)
+	updateDocument(documentId: string | Models.Document, data: { [key: string]: any } = {}, permissions: string[] = null) {
+		return databases.updateDocument(this.databaseId, this.collectionId, typeof documentId === 'string' ? documentId : documentId.$id, data, permissions)
 	}
 
-	deleteDocument(documentId: string) {
-		return databases.deleteDocument(this.databaseId, this.collectionId, documentId)
+	deleteDocument(documentId: string | Models.Document) {
+		return databases.deleteDocument(this.databaseId, this.collectionId, typeof documentId === 'string' ? documentId : documentId.$id)
 	}
 
 	subscribeInsert() {
@@ -130,19 +128,17 @@ class Collection {
 	protected subscribeCollectionUpdate(document: Models.Document, store: Writable<Models.Document[]>) {
 		client.subscribe(`databases.${this.databaseId}.collections.${this.collectionId}.documents.${document.$id}`, (response: RealtimeResponseEvent<any>) => {
 			if (response.events.includes(`databases.${this.databaseId}.collections.${this.collectionId}.documents.${document.$id}.delete`)) {
-				store.update(current => {
+				return store.update(current => {
 					current.splice(current.indexOf(document), 1)
 					return current
 				})
-				return
 			}
 
 			if (response.events.includes(`databases.${this.databaseId}.collections.${this.collectionId}.documents.${document.$id}.update`)) {
-				store.update(current => {
+				return store.update(current => {
 					current[current.indexOf(document)] = response.payload
 					return current
 				})
-				return
 			}
 		})
 	}
