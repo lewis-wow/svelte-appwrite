@@ -20,7 +20,7 @@
     "vite": "^4.0.0"
   },
   "dependencies": {
-    "appwrite": "^10.1.0"
+    "appwrite": "^10.2.0"
   },
   "author": {
 	"name": "Ludvik Prokopec",
