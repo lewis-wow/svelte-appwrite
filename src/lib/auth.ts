@@ -2,7 +2,7 @@ import { Account, ID } from 'appwrite'
 import { derived, writable } from 'svelte/store'
 import { client } from './settings'
 
-import type { Models } from 'appwrite'
+import type { Models, Client } from 'appwrite'
 import type { Writable } from 'svelte/store'
 
 const account = new Account(client)
@@ -14,7 +14,7 @@ class User extends Account {
 	protected isLoadingStore = writable(true)
 	public isLoading = derived(this.isLoadingStore, $isLoadingStore => $isLoadingStore)
 
-	constructor() {
+	constructor(client: Client) {
 		super(client)
 
 		this.__get().then(() => this.isLoadingStore.set(false))
@@ -33,7 +33,7 @@ class User extends Account {
 
 	async createEmailSession(email: string, password: string) {
 		const session = await account.createEmailSession(email, password)
-		this.__get()
+		await this.__get()
 		return session
 	}
 
@@ -66,7 +66,7 @@ class User extends Account {
 	}
 }
 
-const user = new User()
+const user = new User(client)
 const isLoading = user.isLoading
 
 export { account, user, isLoading }
