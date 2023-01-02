@@ -1,64 +1,68 @@
 import { Account, ID } from 'appwrite'
 import { writable } from 'svelte/store'
 
-import type { Models, Client } from 'appwrite'
+import type { Models } from 'appwrite'
 import type { Writable } from 'svelte/store'
 
-export default (account: Account) => class Auth extends Account {
-	protected userStore: Writable<Models.Account<Models.Preferences>> = writable(null)
-	public subscribe = this.userStore.subscribe
+export default (account: Account) => {
+	const client = account.client
 
-	protected isLoadingStore = writable(true)
-	public isLoading = { subscribe: this.isLoadingStore.subscribe }
+	return class Auth extends Account {
+		protected userStore: Writable<Models.Account<Models.Preferences>> = writable(null)
+		public subscribe = this.userStore.subscribe
 
-	constructor(client: Client) {
-		super(client)
+		protected isLoadingStore = writable(true)
+		public isLoading = { subscribe: this.isLoadingStore.subscribe }
 
-		this.__get().then(() => this.isLoadingStore.set(false))
+		constructor() {
+			super(client)
 
-		client.subscribe('account', (response) => {
-			if (response.events.includes('users.*.update')) {
-				return this.__get()
-			}
+			this.__get().then(() => this.isLoadingStore.set(false))
 
-			if (response.events.includes('users.*.delete')) {
-				this.deleteSessions()
-				return this.userStore.set(null)
-			}
-		})
-	}
+			client.subscribe('account', (response) => {
+				if (response.events.includes('users.*.update')) {
+					return this.__get()
+				}
 
-	async createEmailSession(email: string, password: string) {
-		const session = await account.createEmailSession(email, password)
-		await this.__get()
-		return session
-	}
+				if (response.events.includes('users.*.delete')) {
+					this.deleteSessions()
+					return this.userStore.set(null)
+				}
+			})
+		}
 
-	async deleteSession(sessionId: string) {
-		const session = await account.deleteSession(sessionId) 
-		this.userStore.set(null)
-		return session
-	}
+		async createEmailSession(email: string, password: string) {
+			const session = await account.createEmailSession(email, password)
+			await this.__get()
+			return session
+		}
 
-	async deleteSessions() {
-		const session = await account.deleteSessions()
-		this.userStore.set(null)
-		return session
-	}
-
-	async createAccount(email: string, password: string, name: string = null) {
-		await account.create(ID.unique(), email, password, name)
-	}
-
-	protected async __get() {
-		try {
-			const user = await account.get()
-			this.userStore.set(user)
-
-			return user
-		} catch(e) {
+		async deleteSession(sessionId: string) {
+			const session = await account.deleteSession(sessionId) 
 			this.userStore.set(null)
-			return null
+			return session
+		}
+
+		async deleteSessions() {
+			const session = await account.deleteSessions()
+			this.userStore.set(null)
+			return session
+		}
+
+		async createAccount(email: string, password: string, name: string = null) {
+			await account.create(ID.unique(), email, password, name)
+		}
+
+		protected async __get() {
+			try {
+				const user = await account.get()
+				this.userStore.set(user)
+
+				return user
+			} catch(e) {
+				this.userStore.set(null)
+				return null
+			}
 		}
 	}
 }

@@ -1,7 +1,7 @@
 {
   "name": "svelte-appwrite-client",
   "private": false,
-  "version": "0.2.2",
+  "version": "0.2.3",
   "type": "module",
   "main": "src/lib/main.ts",
   "scripts": {

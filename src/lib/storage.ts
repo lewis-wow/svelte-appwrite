@@ -2,131 +2,135 @@ import { ID } from 'appwrite'
 import { writable } from 'svelte/store'
 
 import type { Writable } from 'svelte/store'
-import type { Models, RealtimeResponseEvent, Client, Storage } from 'appwrite'
+import type { Models, RealtimeResponseEvent, Storage } from 'appwrite'
 
-export default (client: Client, storage: Storage) => class Bucket {
-	constructor(protected bucketId: string) { }
+export default (storage: Storage) => {
+	const client = storage.client
 
-	createFile(file, permissions: string[] = []) {
-		return storage.createFile(this.bucketId, ID.unique(), file, permissions)
-	}
+	return class Bucket {
+		constructor(protected bucketId: string) { }
 
-	deleteFile(file: string | Models.File) {
-		return storage.deleteFile(this.bucketId, typeof file === 'string' ? file : file.$id)
-	}
+		createFile(file, permissions: string[] = []) {
+			return storage.createFile(this.bucketId, ID.unique(), file, permissions)
+		}
 
-	updateFile(file: string | Models.File, permissions: string[] = []) {
-		return storage.updateFile(this.bucketId, typeof file === 'string' ? file : file.$id, permissions)
-	}
+		deleteFile(file: string | Models.File) {
+			return storage.deleteFile(this.bucketId, typeof file === 'string' ? file : file.$id)
+		}
 
-	getFilePreview(file: string | Models.File) {
-		return storage.getFilePreview(this.bucketId, typeof file === 'string' ? file : file.$id)
-	}
+		updateFile(file: string | Models.File, permissions: string[] = []) {
+			return storage.updateFile(this.bucketId, typeof file === 'string' ? file : file.$id, permissions)
+		}
 
-	getFileDownload(file: string | Models.File) {
-		return storage.getFileDownload(this.bucketId, typeof file === 'string' ? file : file.$id)
-	}
+		getFilePreview(file: string | Models.File) {
+			return storage.getFilePreview(this.bucketId, typeof file === 'string' ? file : file.$id)
+		}
 
-	getFileView(file: string | Models.File) {
-		return storage.getFileView(this.bucketId, typeof file === 'string' ? file : file.$id)
-	}
+		getFileDownload(file: string | Models.File) {
+			return storage.getFileDownload(this.bucketId, typeof file === 'string' ? file : file.$id)
+		}
 
-	getFileContent(file: string | Models.File) {
-		const fileContent = writable('')
-		const loading = writable(true)
+		getFileView(file: string | Models.File) {
+			return storage.getFileView(this.bucketId, typeof file === 'string' ? file : file.$id)
+		}
 
-		const { href } = storage.getFileView(this.bucketId, typeof file === 'string' ? file : file.$id)
+		getFileContent(file: string | Models.File) {
+			const fileContent = writable('')
+			const loading = writable(true)
 
-		this.subscribeFileUpdateCallback(file, () => fetch(href).then(res => res.ok ? res.text() : null).then(res => {
-			fileContent.set(res ?? '')
-			loading.set(false)
-		}))
+			const { href } = storage.getFileView(this.bucketId, typeof file === 'string' ? file : file.$id)
 
-		fetch(href).then(res => res.ok ? res.text() : null).then(res => {
-			fileContent.set(res ?? '')
-			loading.set(false)
-		})
+			this.subscribeFileUpdateCallback(file, () => fetch(href).then(res => res.ok ? res.text() : null).then(res => {
+				fileContent.set(res ?? '')
+				loading.set(false)
+			}))
 
-		return [{ subscribe: fileContent.subscribe }, { subscribe: loading.subscribe }] as const
-	}
+			fetch(href).then(res => res.ok ? res.text() : null).then(res => {
+				fileContent.set(res ?? '')
+				loading.set(false)
+			})
 
-	createUploadDispatcher(acceptManyFiles = false) {
-		let files = []
+			return [{ subscribe: fileContent.subscribe }, { subscribe: loading.subscribe }] as const
+		}
 
-		const eventUploadDirective = (node: HTMLInputElement) => {
-			const eventListener = (e) => files = acceptManyFiles ? Array.from(e.target.files) : [e.target.files[0]]
+		createUploadDispatcher(acceptManyFiles = false) {
+			let files = []
 
-			node.addEventListener('change', eventListener)
+			const eventUploadDirective = (node: HTMLInputElement) => {
+				const eventListener = (e) => files = acceptManyFiles ? Array.from(e.target.files) : [e.target.files[0]]
 
-			acceptManyFiles && node.setAttribute('multiple', 'multiple')
+				node.addEventListener('change', eventListener)
 
-			return {
-				destroy() {
-					node.removeEventListener('change', eventListener)
+				acceptManyFiles && node.setAttribute('multiple', 'multiple')
+
+				return {
+					destroy() {
+						node.removeEventListener('change', eventListener)
+					}
 				}
 			}
+
+			const dispatchUpload = (permissions: string[] = []) => {
+				return Promise.all(files.map(file => this.createFile(file, permissions)))
+			}
+
+			return [eventUploadDirective, dispatchUpload] as const
 		}
 
-		const dispatchUpload = (permissions: string[] = []) => {
-			return Promise.all(files.map(file => this.createFile(file, permissions)))
+		createSubsciber(queries: string[] = [], search = '') {
+			const filesStore = writable<Models.File[]>([])
+			const loadingStore = writable(true)
+
+			storage.listFiles(this.bucketId, queries, search).then(({ files }) => {
+				files.forEach(file => this.subscribeFileUpdate(file, filesStore))
+				filesStore.set(files)
+				loadingStore.set(false)
+			})
+
+			return [{ subscribe: filesStore.subscribe }, { subscribe: loadingStore.subscribe }] as const
 		}
 
-		return [eventUploadDirective, dispatchUpload] as const
-	}
+		createObserver() {
+			const dataStore = writable<Models.File[]>([])
 
-	createSubsciber(queries: string[] = [], search = '') {
-		const filesStore = writable<Models.File[]>([])
-		const loadingStore = writable(true)
+			client.subscribe(`buckets.${this.bucketId}.files`, (response: RealtimeResponseEvent<any>) => {
+				if (response.events.includes(`buckets.${this.bucketId}.files.*.create`)) {
+					dataStore.update(current => {
+						current.push(response.payload)
+						return current
+					})
 
-		storage.listFiles(this.bucketId, queries, search).then(({ files }) => {
-			files.forEach(file => this.subscribeFileUpdate(file, filesStore))
-			filesStore.set(files)
-			loadingStore.set(false)
-		})
+					this.subscribeFileUpdate(response.payload, dataStore)
+				}
+			})
 
-		return [{ subscribe: filesStore.subscribe }, { subscribe: loadingStore.subscribe }] as const
-	}
+			return { subscribe: dataStore.subscribe }
+		}
 
-	createObserver() {
-		const dataStore = writable<Models.File[]>([])
-
-		client.subscribe(`buckets.${this.bucketId}.files`, (response: RealtimeResponseEvent<any>) => {
-			if (response.events.includes(`buckets.${this.bucketId}.files.*.create`)) {
-				dataStore.update(current => {
-					current.push(response.payload)
+		protected subscribeFileUpdate(file: Models.File, filesStore: Writable<Models.File[]>) {
+			this.subscribeFileUpdateCallback(file, ({ event }) => {
+				if (event === 'update') return filesStore.update(current => {
+					current[current.indexOf(file)] = file
 					return current
 				})
 
-				this.subscribeFileUpdate(response.payload, dataStore)
-			}
-		})
-
-		return { subscribe: dataStore.subscribe }
-	}
-
-	protected subscribeFileUpdate(file: Models.File, filesStore: Writable<Models.File[]>) {
-		this.subscribeFileUpdateCallback(file, ({ event }) => {
-			if (event === 'update') return filesStore.update(current => {
-				current[current.indexOf(file)] = file
-				return current
+				filesStore.update(current => {
+					current.splice(current.indexOf(file), 1)
+					return current
+				})
 			})
+		}
 
-			filesStore.update(current => {
-				current.splice(current.indexOf(file), 1)
-				return current
+		protected subscribeFileUpdateCallback(file: string | Models.File, callback: ({ fileId, event }: { fileId: string, event: 'update' | 'delete' }) => any) {
+			client.subscribe(`buckets.${this.bucketId}.files.${typeof file === 'string' ? file : file.$id}`, (response: RealtimeResponseEvent<any>) => {
+				if (response.events.includes(`buckets.${this.bucketId}.files.${typeof file === 'string' ? file : file.$id}.update`)) {
+					return callback({ fileId: typeof file === 'string' ? file : file.$id, event: 'update' })
+				}
+
+				if (response.events.includes(`buckets.${this.bucketId}.files.${typeof file === 'string' ? file : file.$id}.delete`)) {
+					return callback({ fileId: typeof file === 'string' ? file : file.$id, event: 'delete' })
+				}
 			})
-		})
-	}
-
-	protected subscribeFileUpdateCallback(file: string | Models.File, callback: ({ fileId, event }: { fileId: string, event: 'update' | 'delete' }) => any) {
-		client.subscribe(`buckets.${this.bucketId}.files.${typeof file === 'string' ? file : file.$id}`, (response: RealtimeResponseEvent<any>) => {
-			if (response.events.includes(`buckets.${this.bucketId}.files.${typeof file === 'string' ? file : file.$id}.update`)) {
-				return callback({ fileId: typeof file === 'string' ? file : file.$id, event: 'update' })
-			}
-
-			if (response.events.includes(`buckets.${this.bucketId}.files.${typeof file === 'string' ? file : file.$id}.delete`)) {
-				return callback({ fileId: typeof file === 'string' ? file : file.$id, event: 'delete' })
-			}
-		})
+		}
 	}
 }
