@@ -4,7 +4,7 @@ import { writable } from 'svelte/store'
 import type { Writable } from 'svelte/store'
 import type { Models, RealtimeResponseEvent, Client, Storage } from 'appwrite'
 
-export default (client: Client, storage: Storage) => class {
+export default (client: Client, storage: Storage) => class Bucket {
 	constructor(protected bucketId: string) { }
 
 	createFile(file, permissions: string[] = []) {

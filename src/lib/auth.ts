@@ -4,7 +4,7 @@ import { writable } from 'svelte/store'
 import type { Models, Client } from 'appwrite'
 import type { Writable } from 'svelte/store'
 
-export default (account: Account) => class extends Account {
+export default (account: Account) => class Auth extends Account {
 	protected userStore: Writable<Models.Account<Models.Preferences>> = writable(null)
 	public subscribe = this.userStore.subscribe
 

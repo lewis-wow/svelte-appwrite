@@ -4,7 +4,7 @@ import { Query, ID } from 'appwrite';
 import type { Writable } from 'svelte/store'
 import type { Models, RealtimeResponseEvent, Client, Databases } from 'appwrite'
 
-export default (client: Client, databases: Databases) => class {
+export default (client: Client, databases: Databases) => class Collection {
 	constructor(protected databaseId: string, protected collectionId: string) { }
 
 	createDocument(data: { [key: string]: any } = {}, permissions: string[] = null, id: string = ID.unique()) {
