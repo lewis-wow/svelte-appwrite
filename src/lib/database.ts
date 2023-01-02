@@ -1,4 +1,4 @@
-import { get, writable } from 'svelte/store'
+import { writable } from 'svelte/store'
 import { client } from './settings'
 import { Query, Databases, ID } from 'appwrite';
 
@@ -10,8 +10,8 @@ const databases = new Databases(client)
 class Collection {
 	constructor(protected databaseId: string, protected collectionId: string) { }
 
-	createDocument(data: { [key: string]: any } = {}, permissions: string[] = null) {
-		return databases.createDocument(this.databaseId, this.collectionId, ID.unique(), data, permissions)
+	createDocument(data: { [key: string]: any } = {}, permissions: string[] = null, id: string = ID.unique()) {
+		return databases.createDocument(this.databaseId, this.collectionId, id, data, permissions)
 	}
 
 	updateDocument(documentId: string | Models.Document, data: { [key: string]: any } = {}, permissions: string[] = null) {
@@ -22,11 +22,13 @@ class Collection {
 		return databases.deleteDocument(this.databaseId, this.collectionId, typeof documentId === 'string' ? documentId : documentId.$id)
 	}
 
-	subscribeInsert() {
+	listenInsert(filter: (document: Models.Document) => boolean = () => true) {
 		const dataStore = writable<Models.Document[]>([])
 
 		client.subscribe(`databases.${this.databaseId}.collections.${this.collectionId}.documents`, (response: RealtimeResponseEvent<any>) => {
 			if (response.events.includes(`databases.${this.databaseId}.collections.${this.collectionId}.documents.*.create`)) {
+				if(filter(response.payload) === false) return
+
 				dataStore.update(current => {
 					current.push(response.payload)
 					return current
@@ -39,7 +41,35 @@ class Collection {
 		return { subscribe: dataStore.subscribe }
 	}
 
-	listDocuments(filters: string[] = [], offset: number = 0, limit: number = -1, orderType: 'ASC' | 'DESC' | null = null) {
+	getDocument(documentId: string)
+	getDocument(filters: string[])
+	getDocument(documentId: string | string[]) {
+		const store = writable<Models.Document>(null)
+		const loading = writable(true)
+
+		if (typeof documentId === 'string') {
+			databases.getDocument(this.databaseId, this.collectionId, documentId).then(data => {
+				store.set(data)
+				loading.set(false)
+
+				this.subscribeCollectionUpdate(data, store)
+			})
+		} else {
+			databases.listDocuments(this.databaseId, this.collectionId, documentId).then(data => {
+				if(data.total < 1) throw new Error('Document that matches the query not found')
+				if(data.total > 1) throw new Error('Multiple documents found, use listDocuments instead or try to be more specific in your query')
+
+				store.set(data.documents[0])
+				loading.set(false)
+
+				this.subscribeCollectionUpdate(data.documents[0], store)
+			})
+		}
+
+		return [{ subscribe: store.subscribe }, { subscribe: loading.subscribe }] as const
+	}
+
+	listDocuments(filters: string[] = [], offset: number = 0, limit: number = -1, orderType: 'ASC' | 'DESC' = null) {
 		const loadingStore = writable(true)
 		const dataStore = writable<Models.Document[]>([])
 
@@ -48,9 +78,10 @@ class Collection {
 		if(Number.isInteger(limit) === false) throw new TypeError('limit must be a non-negative integer or -1')
 		if(limit < -1) throw new TypeError('limit must be a non-negative integer or -1')
 
-		const queries = [...filters, Query.offset(offset)]
+		const queries = [...filters]
+		if(offset > 0) queries.push(Query.offset(offset))
 		if (limit !== -1) queries.push(Query.limit(limit))
-		if (orderType) queries.push(orderType === 'ASC' ? Query.orderAsc('') : Query.orderDesc(''))
+		if (orderType !== null) queries.push(orderType === 'ASC' ? Query.orderAsc('') : Query.orderDesc(''))
 
 		databases.listDocuments(this.databaseId, this.collectionId, queries).then(data => {
 			data.documents.forEach((document) => this.subscribeCollectionUpdate(document, dataStore))
@@ -125,10 +156,14 @@ class Collection {
 		return [{ subscribe: dataStore.subscribe }, directive] as const
 	}
 
-	protected subscribeCollectionUpdate(document: Models.Document, store: Writable<Models.Document[]>) {
+	protected subscribeCollectionUpdate(document: Models.Document, store: Writable<Models.Document[]>)
+	protected subscribeCollectionUpdate(document: Models.Document, store: Writable<Models.Document>)
+	protected subscribeCollectionUpdate(document: Models.Document, store: Writable<Models.Document[]> | Writable<Models.Document>) {
 		client.subscribe(`databases.${this.databaseId}.collections.${this.collectionId}.documents.${document.$id}`, (response: RealtimeResponseEvent<any>) => {
 			if (response.events.includes(`databases.${this.databaseId}.collections.${this.collectionId}.documents.${document.$id}.delete`)) {
 				return store.update(current => {
+					if(Array.isArray(current) === false) return null
+
 					current.splice(current.indexOf(document), 1)
 					return current
 				})
@@ -136,6 +171,8 @@ class Collection {
 
 			if (response.events.includes(`databases.${this.databaseId}.collections.${this.collectionId}.documents.${document.$id}.update`)) {
 				return store.update(current => {
+					if(Array.isArray(current) === false) return response.payload
+
 					current[current.indexOf(document)] = response.payload
 					return current
 				})
@@ -144,69 +181,4 @@ class Collection {
 	}
 }
 
-class Document {
-	protected store = writable<Models.Document>(null)
-	public subscribe = this.store.subscribe
-
-	constructor(document: Models.Document) {
-		this.store.set(document)
-
-		this.on('update', (response) => this.store.set(response))
-		this.on('delete', () => this.store.set(undefined))
-	}
-
-	delete() {
-		const document = this.toDocument()
-		if(document === undefined) throw Error('Document doesn\'t exist')
-		if (document === null) throw Error('Document is empty or loading')
-
-		return databases.deleteDocument(document.$databaseId, document.$collectionId, document.$id)
-	}
-
-	update(data: { [key: string]: any } = {}, permissions: string[] = []) {
-		const document = this.toDocument()
-		if(document === undefined) throw Error('Document doesn\'t exist')
-		if (document === null) throw Error('Document is empty or loading')
-		
-		return databases.updateDocument(document.$databaseId, document.$collectionId, document.$id, data, permissions)
-	}
-
-	on(event: 'update' | 'delete', callback: (data: Models.Document) => void) {
-		const document = this.toDocument()
-		return client.subscribe(`databases.${document.$databaseId}.collections.${document.$collectionId}.documents.${document.$id}`, (response: RealtimeResponseEvent<any>) => {
-			if (response.events.includes(`databases.${document.$databaseId}.collections.${document.$collectionId}.documents.${document.$id}.${event}`)) {
-				callback(response.payload)
-			}
-		})
-	}
-
-	toDocument() {
-		return get(this.store)
-	}
-
-	static fetch(databaseId: string, collectionId: string, documentId: string) {
-		const document = new Document(null)
-		const loadingStore = writable(true)
-
-		databases.getDocument(databaseId, collectionId, documentId).then(data => {
-			document.store.set(data)
-			loadingStore.set(false)
-		})
-
-		return [document, { subscribe: loadingStore.subscribe }] as const
-	}
-
-	static create(databaseId: string, collectionId: string, data: { [key: string]: any } = {}, permissions: string[] = []) {
-		const document = new Document(null)
-		const loadingStore = writable(true)
-
-		databases.createDocument(databaseId, collectionId, ID.unique(), data, permissions).then(data => {
-			document.store.set(data)
-			loadingStore.set(false)
-		})
-
-		return [document, { subscribe: loadingStore.subscribe }] as const
-	}
-}
-
-export { Collection, Document, databases }	
+export { Collection, databases }	
