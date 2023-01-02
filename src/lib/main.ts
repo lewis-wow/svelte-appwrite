@@ -1,4 +1,3 @@
 export { user, isLoading, account } from './auth'
-export * as database from './database'
-export * as settings from './settings'
-export * as storage from './storage'
+export { Collection, databases } from './database'
+export { Bucket, File, storage } from './storage'
