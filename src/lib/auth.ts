@@ -1,5 +1,5 @@
 import { Account, ID } from 'appwrite'
-import { derived, writable } from 'svelte/store'
+import { writable } from 'svelte/store'
 import { client } from './settings'
 
 import type { Models, Client } from 'appwrite'
@@ -12,7 +12,7 @@ class User extends Account {
 	public subscribe = this.userStore.subscribe
 
 	protected isLoadingStore = writable(true)
-	public isLoading = derived(this.isLoadingStore, $isLoadingStore => $isLoadingStore)
+	public isLoading = { subscribe: this.isLoadingStore.subscribe }
 
 	constructor(client: Client) {
 		super(client)
