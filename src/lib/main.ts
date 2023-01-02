@@ -1,3 +1,5 @@
-export { user, isLoading, account } from './auth'
-export { Collection, databases } from './database'
-export { Bucket, File, storage } from './storage'
+import auth from './auth'
+import database from './database'
+import storage from './storage'
+
+export { auth, database, storage }

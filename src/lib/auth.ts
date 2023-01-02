@@ -1,13 +1,10 @@
 import { Account, ID } from 'appwrite'
 import { writable } from 'svelte/store'
-import { client } from './settings'
 
 import type { Models, Client } from 'appwrite'
 import type { Writable } from 'svelte/store'
 
-const account = new Account(client)
-
-class User extends Account {
+export default (account: Account) => class extends Account {
 	protected userStore: Writable<Models.Account<Models.Preferences>> = writable(null)
 	public subscribe = this.userStore.subscribe
 
@@ -65,8 +62,3 @@ class User extends Account {
 		}
 	}
 }
-
-const user = new User(client)
-const isLoading = user.isLoading
-
-export { account, user, isLoading }

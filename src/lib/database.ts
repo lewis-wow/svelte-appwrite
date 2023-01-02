@@ -1,13 +1,10 @@
 import { writable } from 'svelte/store'
-import { client } from './settings'
-import { Query, Databases, ID } from 'appwrite';
+import { Query, ID } from 'appwrite';
 
 import type { Writable } from 'svelte/store'
-import type { Models, RealtimeResponseEvent } from 'appwrite'
+import type { Models, RealtimeResponseEvent, Client, Databases } from 'appwrite'
 
-const databases = new Databases(client)
-
-class Collection {
+export default (client: Client, databases: Databases) => class {
 	constructor(protected databaseId: string, protected collectionId: string) { }
 
 	createDocument(data: { [key: string]: any } = {}, permissions: string[] = null, id: string = ID.unique()) {
@@ -180,5 +177,3 @@ class Collection {
 		})
 	}
 }
-
-export { Collection, databases }	

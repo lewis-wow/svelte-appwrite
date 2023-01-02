@@ -1,13 +1,10 @@
-import { client } from './settings'
-import { ID, Storage } from 'appwrite'
+import { ID } from 'appwrite'
 import { writable } from 'svelte/store'
 
 import type { Writable } from 'svelte/store'
-import type { Models, RealtimeResponseEvent} from 'appwrite'
+import type { Models, RealtimeResponseEvent, Client, Storage } from 'appwrite'
 
-const storage = new Storage(client)
-
-class Bucket {
+export default (client: Client, storage: Storage) => class {
 	constructor(protected bucketId: string) { }
 
 	createFile(file, permissions: string[] = []) {
@@ -133,80 +130,3 @@ class Bucket {
 		})
 	}
 }
-
-class File {
-	protected bucketId: string
-	protected fileId: string
-
-	constructor(bucketId: string, fileId: string)
-	constructor(file: Models.File)
-	constructor(bucketId: string | Models.File, fileId?: string) {
-		this.bucketId = typeof bucketId === 'string' ? bucketId : bucketId.bucketId
-		this.fileId = typeof bucketId === 'string' ? fileId : bucketId.$id
-	}
-
-	createSubscriber() {
-		const fileStore = writable<Models.File>(null)
-		const loadingStore = writable(true)
-
-		storage.getFile(this.bucketId, this.fileId).then((result) => {
-			fileStore.set(result)
-			loadingStore.set(false)
-		})
-
-		client.subscribe(`buckets.${this.bucketId}.files.${this.fileId}`, (response: RealtimeResponseEvent<any>) => {
-			if (response.events.includes(`buckets.${this.bucketId}.files.${this.fileId}.update`)) {
-				fileStore.set(response.payload)
-				return
-			}
-
-			if (response.events.includes(`buckets.${this.bucketId}.files.${this.fileId}.delete`)) {
-				fileStore.set(null)
-				return
-			}
-		})
-
-		return [{ subscribe: fileStore.subscribe }, { subscribe: loadingStore.subscribe }] as const
-	}
-
-	delete() {
-		return storage.deleteFile(this.bucketId, this.fileId)
-	}
-
-	update(permissions: string[] = []) {
-		return storage.updateFile(this.bucketId, this.fileId, permissions)
-	}
-
-	getPreview() {
-		return storage.getFilePreview(this.bucketId, this.fileId)
-	}
-
-	getDownload() {
-		return storage.getFileDownload(this.bucketId, this.fileId)
-	}
-
-	getView() {
-		return storage.getFileView(this.bucketId, this.fileId)
-	}
-
-	async getContent() {
-		const fileContent = writable('')
-		const loading = writable(true)
-
-		const { href } = storage.getFileView(this.bucketId, this.fileId)
-
-		fetch(href).then(res => res.ok ? res.text() : null).then(res => {
-			fileContent.set(res ?? '')
-			loading.set(false)
-		})
-
-		return [{ subscribe: fileContent.subscribe }, { subscribe: loading.subscribe }] as const
-	}
-
-	static async create(bucketId: string, file, permissions: string[] = []) {
-		const created = await storage.createFile(bucketId, ID.unique(), file, permissions)
-		return new File(created)
-	}
-}
-
-export { Bucket, File, storage }
