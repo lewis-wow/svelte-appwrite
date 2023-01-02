@@ -10,7 +10,7 @@ export default (storage: Storage) => {
 	return class Bucket {
 		constructor(protected bucketId: string) { }
 
-		createFile(file, permissions: string[] = []) {
+		createFile(file: File, permissions: string[] = []) {
 			return storage.createFile(this.bucketId, ID.unique(), file, permissions)
 		}
 
