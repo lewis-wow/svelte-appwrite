@@ -1,5 +1,5 @@
-import auth from './auth'
-import database from './database'
-import storage from './storage'
+import createAuthDispatcher from './auth'
+import createCollectionDispatcher from './database'
+import createBucketDispatcher from './storage'
 
-export { auth, database, storage }
+export { createAuthDispatcher, createCollectionDispatcher, createBucketDispatcher }
